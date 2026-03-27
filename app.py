@@ -7,9 +7,24 @@ import plotly.express as px
 from analyzer import analyze_file
 from analyzer import extract_functions
 from docstring_generator import generate_docstring
+if "file_names" not in st.session_state:
+    st.session_state["file_names"] = []
+
+file_names = st.session_state["file_names"]
 
 st.set_page_config(page_title="AI Powered Code Reviewer", layout="wide")
-st.title("🤖 AI Powered Code Reviewer")
+st.markdown("""
+<h1 style="
+    background: linear-gradient(90deg, #a855f7, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    font-size: 40px;
+    margin-bottom: 10px;
+">
+🤖 AI Powered Code Reviewer
+</h1>
+""", unsafe_allow_html=True)
 
 if "show_filter" not in st.session_state:
     st.session_state["show_filter"]=False
@@ -17,47 +32,30 @@ if "show_filter" not in st.session_state:
 uploaded_folder = "uploaded_files"
 os.makedirs(uploaded_folder, exist_ok=True)
 
-file_names=[]
 
 st.markdown("""
 <style>
 
-.main {
-    background-color:#f1f5f9;
+/* FORCE override Streamlit default blue */
+.stButton > button {
+    background: linear-gradient(90deg, #a855f7, #ec4899) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    border: none !important;
+    padding: 10px 18px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
 }
 
-section[data-testid="stSidebar"]{
-    background:linear-gradient(180deg,#020617,#1e3a8a);
-    color:white;
+/* Hover effect */
+.stButton > button:hover {
+    transform: scale(1.07);
+    background: linear-gradient(90deg, #9333ea, #db2777) !important;
 }
 
-.metric-card{
-background:linear-gradient(135deg,#0ea5e9,#22c55e);
-padding:20px;
-border-radius:15px;
-text-align:center;
-color:white;
-font-size:18px;
-box-shadow:0 4px 10px rgba(0,0,0,0.15);
-}
-
-.metric-card h3{
-font-size:28px;
-margin-bottom:5px;
-}
-
-.info-box{
-background:white;
-padding:20px;
-border-radius:12px;
-box-shadow:0 2px 10px rgba(0,0,0,0.1);
-}
-
-.stButton>button{
-background:linear-gradient(90deg,#2563eb,#06b6d4);
-color:white;
-border-radius:8px;
-border:none;
+/* Click effect */
+.stButton > button:active {
+    transform: scale(0.97);
 }
 
 </style>
@@ -74,18 +72,38 @@ if uploaded_files:
         save_path = os.path.join(uploaded_folder, file.name)
         with open(save_path, "wb") as f:
             f.write(file.getbuffer())
-        file_names.append(save_path)
+        if save_path not in st.session_state["file_names"]:
+            st.session_state["file_names"].append(save_path)
         
-    
-# Sidebar: ask for folder where your VSCode files are
-project_path = st.sidebar.text_input("Project Folder Path", "")
+st.sidebar.title("📂 Project Controls")
 
+folder_path = st.sidebar.text_input("📁 Project Folder Path")
 
-if st.sidebar.button("Scan Project", key="scan_project_btn") and project_path:
-    # List all .py files in the folder
-    file_names = [os.path.join(project_path, f)
-                  for f in os.listdir(project_path) if f.endswith(".py")]
-    st.sidebar.success(f"{len(file_names)} files found")  # full path
+if st.sidebar.button("Scan Project"):
+    if os.path.exists(folder_path):
+        py_files = []
+
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.endswith(".py"):
+                    py_files.append(os.path.join(root, file))
+
+        if py_files:
+            st.session_state["file_names"] = py_files
+            st.sidebar.success(f"{len(py_files)} files loaded ✅")
+        else:
+            st.sidebar.warning("No Python files found")
+    else:
+        st.sidebar.error("Invalid path")
+
+        st.sidebar.divider()
+
+        st.sidebar.title("🧭 Navigation")
+
+        page = st.sidebar.selectbox(
+            "Select Page",
+            ["Dashboard", "Validation", "Metrics", "JSON View", "Docstring"]
+        )
 
 if "generated_doc" not in st.session_state:
     st.session_state["generated_doc"] = ""
@@ -101,7 +119,7 @@ if "current_code" not in st.session_state:
 
 
 def get_docstring(file_path, func_name):
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         tree = ast.parse(f.read())
 
     for node in ast.walk(tree):
@@ -112,7 +130,7 @@ def get_docstring(file_path, func_name):
 
 def apply_docstring(file_path, func_name, docstring):
 
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         source = f.read()
 
     tree = ast.parse(source)
@@ -151,7 +169,19 @@ st.markdown("""
 
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg,#0f172a,#1e3a8a);
-    color: white;
+}
+
+/* Fix input fields visibility */
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] textarea,
+section[data-testid="stSidebar"] select {
+    background-color: white !important;
+    color: black !important;
+}
+
+/* Fix labels */
+section[data-testid="stSidebar"] label {
+    color: white !important;
 }
 
 h1, h2, h3 {
@@ -197,23 +227,8 @@ page = st.sidebar.selectbox(
     ["Dashboard", "Validation", "Metrics", "JSON View", "Docstring"]
 )
 
-# Configuration
-import os
-
-folder_path = st.sidebar.text_input("Scan Folder", "")
-
-if st.sidebar.button("Scan Folder"):
-    py_files = [f for f in os.listdir(folder_path) if f.endswith(".py")]
-    file_names = py_files
-    st.sidebar.success(f"{len(py_files)} files found")
-st.sidebar.title("Configuration")
-project_path = st.sidebar.text_input("Project Path", "sample.py")
-
 uploaded_folder = "uploaded_files"
 os.makedirs(uploaded_folder, exist_ok=True)  # create folder if not exists
-
-if st.sidebar.button("Scan Project"):
-    st.sidebar.success("Project scanned successfully")
 
 
 results = []
@@ -223,10 +238,12 @@ total_lines = 0
 missing_docs = 0
 
 # Analyze uploaded files
-if file_names:
-    for file in file_names:
-
-        data = analyze_file(file)
+if st.session_state["file_names"]:
+    for file in st.session_state["file_names"]:
+        try:
+            data = analyze_file(file)
+        except Exception as e:
+            continue  # skip bad files
 
         total_functions += len(data["functions"])
         total_classes += len(data["classes"])
@@ -503,6 +520,8 @@ if page == "Dashboard":
         then export the analysis report to monitor documentation coverage.
         """)
 
+        st.write("DEBUG file_names:", st.session_state["file_names"])
+        
         # ---------- DOCUMENTATION STANDARDS ----------
         st.subheader("📚 Documentation Standards")
 
@@ -965,20 +984,50 @@ elif page == "Metrics":
     for r in results:
         file_name = os.path.basename(r["file"])
         # Parse file AST to get line numbers
-        with open(r["file"], "r") as f:
-            source = f.read()
+        def safe_read(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except:
+                try:
+                    with open(file_path, "r", encoding="latin-1") as f:
+                        return f.read()
+                except:
+                    return None  # skip unreadable files
             tree = ast.parse(source)
 
-        func_nodes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+        file_name = os.path.basename(r["file"])
+
+        # READ FILE
+        with open(r["file"], "r", encoding="utf-8", errors="ignore") as f:
+            source = f.read()
+
+        # CREATE TREE
+        tree = ast.parse(source)
+
+        # EXTRACT FUNCTIONS
+        func_nodes = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+        }
 
         for func in r["functions"]:
             node = func_nodes.get(func)
+
             start_line = node.lineno if node else None
             end_line = node.end_lineno if node else None
 
-            code_len = (end_line - start_line + 1) if start_line and end_line else 0
-            # Complexity as number: Low=1, Medium=2, High=3
-            if code_len <= 10:
+            # ✅ SAFE LENGTH CALCULATION
+            if start_line is not None and end_line is not None:
+                code_len = end_line - start_line + 1
+            else:
+                code_len = 0
+
+            # ✅ SAFE COMPLEXITY
+            if code_len == 0:
+                complexity = 0
+            elif code_len <= 10:
                 complexity = 1
             elif code_len <= 20:
                 complexity = 2
@@ -997,12 +1046,32 @@ elif page == "Metrics":
                 "Docstring Present": doc_status
             })
 
-    df_functions = pd.DataFrame(function_details)
+        # ✅ CREATE DATAFRAME
+        df_functions = pd.DataFrame(function_details)
+
+        # ✅ FIX 2 (important)
+        if df_functions.empty:
+            df_functions = pd.DataFrame(columns=[
+                "File",
+                "Function",
+                "Complexity",
+                "Start Line",
+                "End Line",
+                "Docstring Present"
+            ])
+
+        # ✅ FIX 3 (debug)
+        st.write("📊 Columns:", df_functions.columns.tolist())
+        st.write("📄 Data Preview:", df_functions.head())
 
     # Metrics summary
     total_functions = len(df_functions)
     avg_complexity = df_functions["Complexity"].mean() if total_functions>0 else 0
-    high_complexity = (df_functions["Complexity"] == 3).sum()
+    high_complexity = 0
+    st.write("Columns:", df_functions.columns.tolist())
+    st.write("Data:", df_functions)
+    if not df_functions.empty and "Complexity" in df_functions.columns:
+        high_complexity = (df_functions["Complexity"] == 3).sum()
     documented = (df_functions["Docstring Present"]=="Yes").sum()
 
     # -------------------- METRIC BOXES --------------------
@@ -1086,7 +1155,11 @@ elif page == "Docstring":
     else:
         style = st.radio("Select Docstring Style", ["Google", "NumPy", "reST"], horizontal=True)
 
-        selected_file = st.selectbox("Select File", file_names,  key="doc_file_select")
+        selected_file = st.selectbox(
+            "Select File",
+            st.session_state["file_names"],
+            key="doc_file_select"
+        )
         functions = extract_functions(selected_file)
         func = st.selectbox("Select Function", functions,  key="doc_func_select")
 
@@ -1095,24 +1168,42 @@ elif page == "Docstring":
         if key_current_doc not in st.session_state:
             st.session_state[key_current_doc] = get_docstring(selected_file, func)
 
-        st.subheader("Current Docstring")
-        st.code(st.session_state[key_current_doc] if st.session_state[key_current_doc] else "No docstring")
+        # --- SIDE BY SIDE ---
+        col1, col2 = st.columns(2)
 
-        st.subheader("Generated Docstring")
-        # Generate docstring button
-        if st.button("Generate Docstring", key=f"generate_doc_{selected_file}_{func}"):
-            st.session_state["generated_doc"] = generate_docstring(func, style)
+        with col1:
+            st.subheader("📄 Current Docstring")
 
-        # Display generated docstring if exists
-        if st.session_state.get("generated_doc"):
-            st.code(st.session_state["generated_doc"])
+            st.code(
+                st.session_state[key_current_doc] if st.session_state[key_current_doc] else "No docstring",
+                language="python"
+            )
+
+            # 👇 Generate button BELOW current docstring
+            if st.button("Generate Docstring", key=f"generate_doc_{selected_file}_{func}"):
+                st.session_state["generated_doc"] = generate_docstring(func, style)
+
+        with col2:
+            st.subheader("✨ Generated Docstring")
+
+            st.code(
+                st.session_state.get("generated_doc", "Click 'Generate Docstring'"),
+                language="python"
+            )
 
             # Accept & Apply button
-            if st.button("Accept & Apply Docstring", key=f"apply_doc_{selected_file}_{func}"):
-                apply_docstring(selected_file, func, st.session_state["generated_doc"])
+            col1,col2 = st.columns(2)
+            with col1:
+                    if st.button("Accept & Apply Docstring", key=f"apply_doc_{selected_file}_{func}"):
+                        apply_docstring(selected_file, func, st.session_state["generated_doc"])
 
-                # Update the current docstring for this function immediately
-                st.session_state[key_current_doc] = st.session_state["generated_doc"]
+                        st.session_state[key_current_doc] = st.session_state["generated_doc"]
 
-                # Dummy toggle to force re-render
-                st.session_state["update_dummy"] = not st.session_state.get("update_dummy", False)
+                        st.session_state["update_dummy"] = not st.session_state.get("update_dummy", False)
+
+                        st.success("Docstring applied successfully!")
+
+            with col2:
+                    if st.button("Skip Style", key=f"skip_doc_{selected_file}_{func}"):
+                        st.session_state["generated_doc"] = ""
+                        st.info("Skipped for this function")
